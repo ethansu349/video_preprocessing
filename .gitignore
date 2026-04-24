@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+synced_frames/
+review/
+*.raw
+*.png
