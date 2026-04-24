@@ -9,80 +9,64 @@ Three cameras (iPhone 14, JVC recorder, MCU stationary) recorded the same burn e
 ## Prerequisites
 
 - `ffmpeg` / `ffprobe` (on HPC: `module load ffmpeg`)
-- Python packages: `pip install numpy scipy opencv-python matplotlib`
+- Python packages: `pip install numpy scipy opencv-python`
 - Activate env: `module load mamba && mamba activate 3dDynamics_YOLO`
 
 ## Quick Start — Interactive Pipeline
 
-`sync_cameras.py` guides you through the full workflow: auto-compute offsets, visually verify with side-by-side images, adjust if needed, then extract synced frames.
-
 ```bash
-BASE=/storage/project/r-jtaylor357-0/ysu349/Datasets/test_burn/test_burn_footages
+VIDS=/storage/project/r-jtaylor357-0/ysu349/Datasets/test_burn/test_burn_footages/FULL_Videos
+FRAMES=/storage/project/r-jtaylor357-0/ysu349/Datasets/test_burn/test_burn_footages/achive_frames
 
 python sync_cameras.py \
-    --iphone "$BASE/iPhone14_FULL.MOV" \
-    --jvc "$BASE/JVC_Recorder_FULL.m2ts" \
-    --mcu "$BASE/MCU_Stationary_Camera_Full.m4v" \
-    --iphone-frames "$BASE/iPhone_Frames" \
-    --mcu-frames "$BASE/MCU_Stationary_Camera_Frames" \
+    --iphone "$VIDS/iPhone14_FULL.MOV" \
+    --jvc "$VIDS/JVC_Recorder_FULL.m2ts" \
+    --mcu "$VIDS/MCU_Stationary_Camera_Full.m4v" \
+    --iphone-frames "$FRAMES/iPhone_Frames" \
+    --mcu-frames "$FRAMES/MCU_Stationary_Camera_Frames" \
     --output ./synced_frames
 ```
 
-The script will:
+### What happens
 
-1. **Auto-compute iPhone-JVC offset** via audio cross-correlation
-2. **Save 5 side-by-side comparison images** to `./review/jvc/` — open them to check alignment
-3. **Wait for your input**: Enter to accept, type a number to adjust, `+N`/`-N` for relative adjustment
-4. **Auto-compute iPhone-MCU offset** via brightness cross-correlation (MCU has no audio)
-5. **Same verification loop** for MCU
-6. **Extract synchronized frame triplets** to `./synced_frames/{iphone,jvc,mcu}/`
+1. **Auto-computes iPhone-JVC offset** via audio cross-correlation
+2. **Generates a self-contained HTML viewer** (`review/jvc/index.html`, ~5 MB, all images embedded)
+3. **You open it in a browser** — iPhone frame on the left (fixed), JVC frame on the right (navigable via arrow keys / slider). The current offset is shown at the top.
+4. **You find the matching frame**, note the offset value, type it in the terminal (or press Enter to accept the candidate)
+5. **Same process for MCU** (uses brightness cross-correlation since MCU has no audio)
+6. **Extracts synchronized frame triplets** to `synced_frames/{iphone,jvc,mcu}/`
 
-If you already know the offsets (from a previous run or manual identification):
+### Viewer controls
+
+| Input | Action |
+|-------|--------|
+| `←` / `→` | Step ±1 second |
+| `Shift + ←` / `→` | Step ±5 seconds |
+| Slider | Jump to any position |
+| Buttons | `« -5s` `‹ -1s` `+1s ›` `+5s »` |
+
+### Terminal prompt
+
+After reviewing the viewer:
+
+| Input | Action |
+|-------|--------|
+| `Enter` | Accept the candidate offset |
+| `14.0` | Set this as the new offset (regenerates viewer to fine-tune) |
+| `r` | Regenerate with wider range (±40s, then ±80s, up to ±120s) |
+| `q` | Quit |
+
+### Skip auto-detection
+
+If you already know the offsets:
 
 ```bash
 python sync_cameras.py \
-    --iphone "$BASE/iPhone14_FULL.MOV" \
-    --jvc "$BASE/JVC_Recorder_FULL.m2ts" \
-    --mcu "$BASE/MCU_Stationary_Camera_Full.m4v" \
+    --iphone "$VIDS/iPhone14_FULL.MOV" \
+    --jvc "$VIDS/JVC_Recorder_FULL.m2ts" \
+    --mcu "$VIDS/MCU_Stationary_Camera_Full.m4v" \
     --jvc-offset 12.5 --mcu-offset -45.0 \
     --output ./synced_frames
-```
-
-## Standalone Scripts
-
-Individual steps can also be run independently:
-
-```bash
-# Audio offset only (iPhone ↔ JVC)
-python find_offset_audio.py \
-    --ref "$BASE/iPhone14_FULL.MOV" \
-    --target "$BASE/JVC_Recorder_FULL.m2ts" \
-    --save-plot audio_corr.png
-
-# Brightness offset only (for MCU or verification)
-python find_offset_brightness.py \
-    --ref-frames "$BASE/iPhone_Frames" \
-    --target-frames "$BASE/MCU_Stationary_Camera_Frames" \
-    --ref-video "$BASE/iPhone14_FULL.MOV" \
-    --target-video "$BASE/MCU_Stationary_Camera_Full.m4v" \
-    --save-plot brightness_corr.png
-
-# Extract frames with known offsets (non-interactive)
-python extract_synced_frames.py \
-    --iphone "$BASE/iPhone14_FULL.MOV" \
-    --jvc "$BASE/JVC_Recorder_FULL.m2ts" \
-    --mcu "$BASE/MCU_Stationary_Camera_Full.m4v" \
-    --jvc-offset 12.5 --mcu-offset -45.0 \
-    --output ./synced_frames --verify 1 50 100
-```
-
-## Manual Visual Event Identification
-
-If brightness correlation gives a weak result for MCU, extract single frames at specific timestamps to find a common event (e.g., ignition):
-
-```bash
-ffmpeg -ss 120 -i "$BASE/MCU_Stationary_Camera_Full.m4v" -frames:v 1 -q:v 2 mcu_120s.jpg
-ffmpeg -ss 60  -i "$BASE/iPhone14_FULL.MOV" -frames:v 1 -q:v 2 iphone_60s.jpg
 ```
 
 ## Output
@@ -96,6 +80,14 @@ synced_frames/
 ```
 
 Same frame index across all 3 directories = same moment in time.
+
+## Data Access
+
+All video reads are **read-only**. No files are created in the Datasets directory.
+
+- **Raw videos (READ-ONLY)**: `.../test_burn_footages/FULL_Videos/`
+- **Archive frames (READ-ONLY)**: `.../test_burn_footages/achive_frames/` — used only for brightness cross-correlation (MCU offset)
+- **All outputs**: written to `video_preprocessing/review/` and `video_preprocessing/synced_frames/`
 
 ## Camera Details
 

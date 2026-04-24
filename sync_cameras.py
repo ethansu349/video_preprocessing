@@ -24,6 +24,7 @@ Usage:
 """
 
 import argparse
+import base64
 import json
 import re
 import subprocess
@@ -132,7 +133,7 @@ _HTML_TEMPLATE = """\
 <div class="pair">
   <div class="cam ref">
     <h3>{ref_label} (reference)</h3>
-    <img id="refimg" src="{ref_img}">
+    <img id="refimg" src="{ref_img_b64}">
   </div>
   <div class="cam tgt">
     <h3>{tgt_label} &mdash; t = <span id="tgt_t">?</span>s</h3>
@@ -163,7 +164,7 @@ let idx = {initial_idx};
 
 function render() {{
   const f = frames[idx];
-  document.getElementById('tgtimg').src = f.file;
+  document.getElementById('tgtimg').src = f.b64;
   document.getElementById('val').textContent = f.offset.toFixed(1);
   document.getElementById('tgt_t').textContent = f.tgt_time.toFixed(1);
   document.getElementById('slider').value = idx;
@@ -186,6 +187,12 @@ render();
 </body>
 </html>
 """
+
+
+def _img_to_b64(path):
+    """Read an image file and return a data:image/jpeg;base64,... URI."""
+    data = Path(path).read_bytes()
+    return "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")
 
 
 # ---------------------------------------------------------------------------
@@ -296,11 +303,11 @@ def _brightness_curve(frames_dir):
 
 def _build_viewer(ref_video, tgt_video, candidate, ref_label, tgt_label,
                   review_dir, half_range=20):
-    """Extract frames and generate an HTML viewer for offset verification.
+    """Extract frames, embed as base64, and generate a self-contained HTML viewer.
 
-    Picks a reference timestamp at the midpoint of the overlap, extracts one
-    reference frame, and (2*half_range + 1) target frames at 1-second intervals
-    centred on the candidate offset.  Returns the path to the HTML file.
+    The HTML file contains all images inline — no external file dependencies.
+    It can be opened directly in any browser, scp'd to a laptop, or previewed
+    in VS Code.  Returns the path to the HTML file, or None if no overlap.
     """
     ref_dur = get_video_duration(ref_video)
     tgt_dur = get_video_duration(tgt_video)
@@ -323,47 +330,58 @@ def _build_viewer(ref_video, tgt_video, candidate, ref_label, tgt_label,
     extract_dur = extract_end - extract_start
 
     rdir = Path(review_dir)
-    tgt_dir = rdir / "target_frames"
+    rdir.mkdir(parents=True, exist_ok=True)
 
-    # Extract reference frame
-    ref_img_name = "ref.jpg"
-    print(f"  Extracting reference frame ({ref_label} t={ref_time:.1f}s) …")
-    extract_single_frame(ref_video, ref_time, rdir / ref_img_name)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
 
-    # Extract target frames at 1 fps
-    print(f"  Extracting {int(extract_dur)+1} target frames "
-          f"({tgt_label} t={extract_start:.0f}–{extract_end:.0f}s) …")
-    target_frames = extract_frame_batch(
-        tgt_video, extract_start, extract_dur, fps=1, output_dir=tgt_dir,
-    )
+        # Extract reference frame
+        ref_img_path = tmp / "ref.jpg"
+        print(f"  Extracting reference frame ({ref_label} t={ref_time:.1f}s) …")
+        extract_single_frame(ref_video, ref_time, ref_img_path)
+        ref_b64 = _img_to_b64(ref_img_path)
 
-    # Build frame metadata for JS
-    frames_data = []
-    initial_idx = 0
-    best_dist = float("inf")
-    for i, (fpath, tgt_t) in enumerate(target_frames):
-        offset_val = ref_time - tgt_t   # offset if this frame is the match
-        frames_data.append({
-            "file": f"target_frames/{fpath.name}",
-            "offset": round(offset_val, 1),
-            "tgt_time": round(tgt_t, 1),
-        })
-        dist = abs(offset_val - candidate)
-        if dist < best_dist:
-            best_dist = dist
-            initial_idx = i
+        # Extract target frames at 1 fps
+        n_frames = int(extract_dur) + 1
+        print(f"  Extracting {n_frames} target frames "
+              f"({tgt_label} t={extract_start:.0f}–{extract_end:.0f}s) …")
+        target_frames = extract_frame_batch(
+            tgt_video, extract_start, extract_dur, fps=1,
+            output_dir=tmp / "tgt",
+        )
 
-    # Write HTML
+        # Build frame metadata for JS — embed each image as base64
+        frames_data = []
+        initial_idx = 0
+        best_dist = float("inf")
+        print(f"  Encoding {len(target_frames)} frames into HTML …", end=" ",
+              flush=True)
+        for i, (fpath, tgt_t) in enumerate(target_frames):
+            offset_val = ref_time - tgt_t  # offset if this frame is the match
+            frames_data.append({
+                "b64": _img_to_b64(fpath),
+                "offset": round(offset_val, 1),
+                "tgt_time": round(tgt_t, 1),
+            })
+            dist = abs(offset_val - candidate)
+            if dist < best_dist:
+                best_dist = dist
+                initial_idx = i
+        print("done")
+
+    # Write self-contained HTML
     html = _HTML_TEMPLATE.format(
         ref_label=ref_label,
         tgt_label=tgt_label,
         ref_time=ref_time,
-        ref_img=ref_img_name,
+        ref_img_b64=ref_b64,
         frames_json=json.dumps(frames_data),
         initial_idx=initial_idx,
     )
     html_path = rdir / "index.html"
     html_path.write_text(html)
+    size_mb = html_path.stat().st_size / 1024 / 1024
+    print(f"  Viewer saved: {html_path} ({size_mb:.1f} MB, self-contained)")
     return html_path
 
 
