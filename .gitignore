@@ -5,3 +5,9 @@ review/
 peek/
 *.raw
 *.png
+*.mp4
+*.mov
+*.m2ts
+*.m4v
+*.avi
+*.mkv

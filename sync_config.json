@@ -1,0 +1,15 @@
+{
+  "videos": {
+    "iphone": "/storage/project/r-jtaylor357-0/ysu349/Datasets/test_burn/test_burn_footages/FULL_Videos/iPhone14_FULL.MOV",
+    "mcu": "/storage/project/r-jtaylor357-0/ysu349/Datasets/test_burn/test_burn_footages/FULL_Videos/MCU_Stationary_Camera_Full.m4v"
+  },
+  "offsets": {
+    "iphone": 0.0,
+    "mcu": -314.999
+  },
+  "anchor_frames": {
+    "iphone_time": 8.167,
+    "mcu_time": 323.166,
+    "event": "green shirt person standing up"
+  }
+}

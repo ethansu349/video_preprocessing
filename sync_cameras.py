@@ -147,17 +147,15 @@ _HTML_TEMPLATE = """\
   </div>
 </div>
 <div class="controls">
-  <button onclick="step(-5)">&laquo; -5s</button>
-  <button onclick="step(-1)">&lsaquo; -1s</button>
-  <button onclick="step(1)">+1s &rsaquo;</button>
-  <button onclick="step(5)">+5s &raquo;</button>
+  <button onclick="step(-1)">&lsaquo; -1 frame</button>
+  <button onclick="step(1)">+1 frame &rsaquo;</button>
 </div>
 <div class="bar">
   <input type="range" id="slider" min="0" max="0" value="0"
          oninput="goTo(parseInt(this.value))">
 </div>
 <div class="hint" style="margin-top:12px">
-  Keyboard: &larr;/&rarr; = &plusmn;1s &nbsp; Shift+&larr;/&rarr; = &plusmn;5s
+  Keyboard: &larr;/&rarr; = &plusmn;1 frame
 </div>
 <div class="hint" style="margin-top:4px; color:#ffe100;">
   When frames match, note the offset above and type it in the terminal.
@@ -168,20 +166,20 @@ let idx = {initial_idx};
 function render() {{
   const f = frames[idx];
   document.getElementById('tgtimg').src = f.b64;
-  document.getElementById('val').textContent = f.offset.toFixed(1);
-  document.getElementById('tgt_t').textContent = f.tgt_time.toFixed(1);
+  document.getElementById('val').textContent = f.offset.toFixed(3);
+  document.getElementById('tgt_t').textContent = f.tgt_time.toFixed(3);
   document.getElementById('slider').value = idx;
   const dir = f.offset >= 0
-    ? '{tgt_label} started ' + f.offset.toFixed(1) + 's after {ref_label}'
-    : '{tgt_label} started ' + Math.abs(f.offset).toFixed(1) + 's before {ref_label}';
+    ? '{tgt_label} started ' + f.offset.toFixed(3) + 's after {ref_label}'
+    : '{tgt_label} started ' + Math.abs(f.offset).toFixed(3) + 's before {ref_label}';
   document.getElementById('meaning').textContent = dir;
 }}
 function step(d) {{ goTo(idx + d); }}
 function goTo(i) {{ idx = Math.max(0, Math.min(frames.length - 1, i)); render(); }}
 document.getElementById('slider').max = frames.length - 1;
 document.addEventListener('keydown', e => {{
-  if (e.key === 'ArrowRight') {{ step(e.shiftKey ? 5 : 1); e.preventDefault(); }}
-  if (e.key === 'ArrowLeft')  {{ step(e.shiftKey ? -5 : -1); e.preventDefault(); }}
+  if (e.key === 'ArrowRight') {{ step(1); e.preventDefault(); }}
+  if (e.key === 'ArrowLeft')  {{ step(-1); e.preventDefault(); }}
 }});
 render();
 </script>
@@ -297,7 +295,7 @@ def _brightness_curve(frames_dir):
 # ---------------------------------------------------------------------------
 
 def _build_viewer(ref_video, tgt_video, candidate, ref_label, tgt_label,
-                  review_dir, half_range=20, ref_time=None):
+                  review_dir, half_range=2, ref_time=None):
     ref_dur = get_video_duration(ref_video)
     tgt_dur = get_video_duration(tgt_video)
 
@@ -326,11 +324,12 @@ def _build_viewer(ref_video, tgt_video, candidate, ref_label, tgt_label,
         extract_single_frame(ref_video, ref_time, ref_img_path)
         ref_b64 = _img_to_b64(ref_img_path)
 
-        n_frames = int(extract_dur) + 1
-        print(f"  Extracting {n_frames} target frames "
-              f"({tgt_label} t={extract_start:.0f}–{extract_end:.0f}s) …")
+        tgt_fps = get_video_fps(tgt_video)
+        n_frames = int(extract_dur * tgt_fps)
+        print(f"  Extracting ~{n_frames} target frames at native {tgt_fps:.1f}fps "
+              f"({tgt_label} t={extract_start:.1f}–{extract_end:.1f}s) …")
         target_frames = extract_frame_batch(
-            tgt_video, extract_start, extract_dur, fps=1,
+            tgt_video, extract_start, extract_dur, fps=tgt_fps,
             output_dir=tmp / "tgt",
         )
 
@@ -343,8 +342,8 @@ def _build_viewer(ref_video, tgt_video, candidate, ref_label, tgt_label,
             offset_val = ref_time - tgt_t
             frames_data.append({
                 "b64": _img_to_b64(fpath),
-                "offset": round(offset_val, 1),
-                "tgt_time": round(tgt_t, 1),
+                "offset": round(offset_val, 3),
+                "tgt_time": round(tgt_t, 3),
             })
             dist = abs(offset_val - candidate)
             if dist < best_dist:
@@ -368,7 +367,7 @@ def _build_viewer(ref_video, tgt_video, candidate, ref_label, tgt_label,
 
 
 def verify_offset(ref_video, tgt_video, candidate,
-                  ref_label, tgt_label, review_dir, half_range=20,
+                  ref_label, tgt_label, review_dir, half_range=2,
                   ref_time=None):
     offset = candidate
 
@@ -690,7 +689,7 @@ def main():
     p_mcu.add_argument("--mcu-offset", type=float, default=None, help="Skip auto-detect, use this offset")
     p_mcu.add_argument("--ref-time", type=float, default=None, help="Anchor timestamp in iPhone video (e.g. ignition)")
     p_mcu.add_argument("--mcu-time", type=float, default=None, help="Anchor timestamp in MCU video (auto-converts to --ref-time using candidate offset)")
-    p_mcu.add_argument("--half-range", type=int, default=20, help="Viewer range ±N seconds (default: 20)")
+    p_mcu.add_argument("--half-range", type=int, default=2, help="Viewer range ±N seconds (default: 2)")
     p_mcu.add_argument("--review-dir", default="./review", help="Review output dir (default: ./review)")
 
     # ---- pair-jvc ----
@@ -699,7 +698,7 @@ def main():
     p_jvc.add_argument("--jvc", required=True, help="JVC video path")
     p_jvc.add_argument("--jvc-offset", type=float, default=None, help="Skip auto-detect, use this offset")
     p_jvc.add_argument("--ref-time", type=float, default=None, help="Anchor timestamp in iPhone video (e.g. ignition)")
-    p_jvc.add_argument("--half-range", type=int, default=20, help="Viewer range ±N seconds (default: 20)")
+    p_jvc.add_argument("--half-range", type=int, default=2, help="Viewer range ±N seconds (default: 2)")
     p_jvc.add_argument("--review-dir", default="./review", help="Review output dir (default: ./review)")
 
     # ---- extract ----
