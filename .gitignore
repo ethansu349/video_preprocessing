@@ -2,5 +2,6 @@ __pycache__/
 *.pyc
 synced_frames/
 review/
+peek/
 *.raw
 *.png
