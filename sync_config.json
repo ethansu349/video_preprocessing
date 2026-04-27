@@ -1,15 +1,24 @@
 {
   "videos": {
     "iphone": "/storage/project/r-jtaylor357-0/ysu349/Datasets/test_burn/test_burn_footages/FULL_Videos/iPhone14_FULL.MOV",
+    "jvc": "/storage/project/r-jtaylor357-0/ysu349/Datasets/test_burn/test_burn_footages/FULL_Videos/JVC_Recorder_FULL.m2ts",
     "mcu": "/storage/project/r-jtaylor357-0/ysu349/Datasets/test_burn/test_burn_footages/FULL_Videos/MCU_Stationary_Camera_Full.m4v"
   },
   "offsets": {
     "iphone": 0.0,
+    "jvc": -8.037,
     "mcu": -314.999
   },
   "anchor_frames": {
-    "iphone_time": 8.167,
-    "mcu_time": 323.166,
-    "event": "green shirt person standing up"
+    "iphone_mcu": {
+      "iphone_time": 8.167,
+      "mcu_time": 323.166,
+      "event": "green shirt person standing up"
+    },
+    "iphone_jvc": {
+      "iphone_time": 724.200,
+      "jvc_time": 732.270,
+      "event": "fire burning, approximate match"
+    }
   }
 }
