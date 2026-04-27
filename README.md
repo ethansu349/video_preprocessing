@@ -38,12 +38,13 @@ python sync_cameras.py \
 
 ### Viewer controls
 
+The HTML viewer extracts at native fps (±2s range) with base64-embedded images. Download via `scp` and open in a local browser.
+
 | Input | Action |
 |-------|--------|
-| `←` / `→` | Step ±1 second |
-| `Shift + ←` / `→` | Step ±5 seconds |
+| `←` / `→` | Step ±1 frame (~0.033s) |
 | Slider | Jump to any position |
-| Buttons | `« -5s` `‹ -1s` `+1s ›` `+5s »` |
+| Buttons | `‹ -1 frame` `+1 frame ›` |
 
 ### Terminal prompt
 
@@ -156,18 +157,60 @@ synced_frames/
 
 Same frame index across all 3 directories = same moment in time.
 
+## Current Status — V1 Extraction Complete
+
+980 synchronized frame triplets at 1fps extracted to `../data/{iphone,jvc,mcu}/`. See `../data/description.md` for full extraction parameters, timestamp mapping, and reproduction commands.
+
+Calibrated offsets (stored in `sync_config.json`):
+
+| Camera | Offset (vs iPhone) | Anchor Event | Precision |
+|--------|-------------------|--------------|-----------|
+| iPhone | 0.000s (reference) | — | — |
+| JVC | -8.037s | Fire burning visual match | ~±2-3s |
+| MCU | -314.999s | Green shirt person standing up | Single-frame (~0.033s) |
+
+## Subcommands (sync_cameras.py)
+
+`sync_cameras.py` uses independent subcommands — run in any order:
+
+```bash
+python sync_cameras.py pair-mcu --iphone VIDEO --mcu VIDEO --iphone-frames DIR --mcu-frames DIR [--mcu-time T]
+python sync_cameras.py pair-jvc --iphone VIDEO --jvc VIDEO [--ref-time T]
+python sync_cameras.py extract --output DIR [--fps N]
+python sync_cameras.py status
+```
+
+Each pair command saves its result to `sync_config.json`. The extract command reads both offsets from that file.
+
+## Side-by-Side Verification — `side_by_side.py`
+
+Generate a side-by-side MP4 from two cameras using calibrated offsets:
+
+```bash
+python side_by_side.py --cam1 iphone --cam2 mcu --start 5 --end 30 --suffix ignition
+python side_by_side.py --cam1 iphone --cam2 jvc --start 720 --end 730 --suffix test
+```
+
+`--suffix` appends to the default filename to allow storing multiple clips without overwriting.
+
+## Documentation
+
+- `docs/frame_sync_theory.md` — Timestamp-based extraction method, error analysis, drift-free guarantee
+- `../data/description.md` — V1 extraction parameters, per-camera timestamps, reproduction commands
+
 ## Data Access
 
 All video reads are **read-only**. No files are created in the Datasets directory.
 
 - **Raw videos (READ-ONLY)**: `.../test_burn_footages/FULL_Videos/`
 - **Archive frames (READ-ONLY)**: `.../test_burn_footages/achive_frames/` — used only for brightness cross-correlation (MCU offset)
-- **All outputs**: written to `video_preprocessing/review/` and `video_preprocessing/synced_frames/`
+- **Sync config & review outputs**: `video_preprocessing/sync_config.json`, `review/`, `peek/`
+- **Final synced data**: `../data/{iphone,jvc,mcu}/` (980 frame triplets, ~1.5 GB total)
 
 ## Camera Details
 
 | Camera | Format | Resolution | Native FPS | Duration | Audio |
 |--------|--------|-----------|-----------|----------|-------|
-| iPhone 14 | HEVC / .MOV | 1920x1080 | 30 | ~997s | AAC 44.1kHz |
-| JVC | MPEG2 / .m2ts | 1440x1080 | 29.97 | ~1091s | MP2 48kHz |
-| MCU | H.264 / .m4v | 1920x1080 | ~25.3 | ~1802s | None |
+| iPhone 14 | HEVC / .MOV | 1920x1080 | 30.00 | 997.5s | AAC 44.1kHz |
+| JVC | MPEG2 / .m2ts | 1440x1080 | 29.97 | 1091.5s | MP2 48kHz |
+| MCU | H.264 / .m4v | 1920x1080 | 25.31 | 1802.0s | None |
